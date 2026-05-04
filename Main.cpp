@@ -106,7 +106,7 @@ void DrawBoard() {
 				box += GetColorEscape(Color::Magenta);
 				break;
 			}
-			box += (myno != Myno::Null) ? ((dummy ? "□" : "██")) : ("  ");
+			box += (myno != Myno::Null) ? ((dummy) ? ("□") : ("██")) : ("  ");
 			box += GetColorEscape(Color::Default);
 			BoardOutPut += box;
 		}
@@ -134,10 +134,8 @@ int main(int argc, char** argv) {
 	system("chcp 65001");
 	system("cls");
 	
-	HWND console = GetConsoleWindow();
-	bool key[256]{};
-	MSG msg = {};
 
+	HWND console = GetConsoleWindow();
 	SetProcessDPIAware();
 	int x = GetSystemMetrics(SM_CXSCREEN) / 2;
 	int y = GetSystemMetrics(SM_CYSCREEN) / 2;
@@ -145,14 +143,23 @@ int main(int argc, char** argv) {
 	int height = 720;
 	MoveWindow(console, x - (width / 2), y - (height / 2), width, height, TRUE);
 
-	while (!(key[VK_ESCAPE] || msg.message == WM_QUIT)) {
+	bool key[256]{};
+	while (true) {
 
-		while (PeekMessage(&msg, console, 0, 0, PM_REMOVE)) {}
-		for (int i = 0; auto& k : key) {
+		// key update
+		for (int i = 0;  auto& k : key) {
 			k = (bool)(GetAsyncKeyState(i) & 0x8000);
 			++i;
 		}
+		
+		if (!IsWindow(console)) {
+			break;
+		}
 
+		if (key[VK_ESCAPE]) {
+			break;
+		}
+		
 		Draw();
 	}
 
