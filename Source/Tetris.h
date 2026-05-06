@@ -1,0 +1,753 @@
+#pragma once
+#include <array>
+#include <deque>
+#include <cstdint>
+#include <algorithm>
+#include <random>
+#include <bitset>
+#include <complex>
+
+#include "Escape.h"
+#include "Input.h"
+#include "timer.hpp"
+
+enum class Myno : uint8_t {
+	Null,
+	I,
+	O,
+	S,
+	Z,
+	J,
+	L,
+	T,
+	PlaceBit = 0x40,
+	pI,
+	pO,
+	pS,
+	pZ,
+	pJ,
+	pL,
+	pT,
+	DummyBit = 0x80,
+	dI,
+	dO,
+	dS,
+	dZ,
+	dJ,
+	dL,
+	dT,
+};
+
+#define _def_logic_op(t)\
+static inline Myno operator##t##(Myno lhs, Myno rhs) { return static_cast<Myno>((uint8_t)lhs t (uint8_t)rhs); }\
+static inline Myno operator##t##(Myno lhs, uint8_t rhs) { return static_cast<Myno>((uint8_t)lhs t rhs); }\
+static inline Myno operator##t##(uint8_t lhs, Myno rhs) { return static_cast<Myno>(lhs t (uint8_t)rhs); }
+
+_def_logic_op(&);
+_def_logic_op(| );
+_def_logic_op(^);
+#undef _def_logic_op
+
+enum class Direction : uint8_t {
+	Upper,
+	Right,
+	Lower,
+	Left,
+	Count
+};
+
+class MynoObject {
+	using inner_field = std::array<std::bitset<4>, 4>;
+
+	Direction Dir = Direction::Upper;
+	Myno Type = Myno::Null;
+	inner_field Collision{};
+	int x = 0;
+	int y = 0;
+
+	inner_field LRotateImpl() {
+		auto [w, h] = GetFieldSize();
+		inner_field ret;
+		for (int j = 0; j < h; ++j) {
+			for (int i = 0; i < w; ++i) {
+				ret[i][j] = Collision[j][w - 1 - i];
+			}
+		}
+		Dir = RotateDirectionImpl(false);
+		return ret;
+	}
+	inner_field RRotateImpl() {
+		auto [w, h] = GetFieldSize();
+		inner_field ret;
+		for (int j = 0; j < h; ++j) {
+			for (int i = 0; i < w; ++i) {
+				ret[i][j] = Collision[h - 1 - j][i];
+			}
+		}
+		Dir = RotateDirectionImpl(true);
+		return ret;
+	}
+
+	Direction RotateDirectionImpl(bool LR) {
+		constexpr int8_t P = static_cast<int8_t>(Direction::Count);
+		int8_t ret = static_cast<int8_t>(Dir);
+		ret = ((ret + (int8_t)std::copysign(1, (int)(!LR) * -1)) % P + P) % P;
+		return static_cast<Direction>(ret);
+	}
+
+	MynoObject(Myno t) : Type(t) {}
+
+public:
+
+	MynoObject() = default;
+	MynoObject(const MynoObject&) = default;
+	MynoObject(MynoObject&&) = default;
+	MynoObject& operator=(const MynoObject&) = default;
+	MynoObject& operator=(MynoObject&&) = default;
+
+	static MynoObject I() {
+		MynoObject ret(Myno::I);
+		ret.Collision = {
+			0b0000,
+			0b1111,
+			0b0000,
+			0b0000
+		};
+		return ret;
+	}
+	static MynoObject O() {
+		MynoObject ret(Myno::O);
+		ret.Collision = {
+			0b0000,
+			0b0110,
+			0b0110,
+			0b0000
+		};
+		return ret;
+	}
+	static MynoObject S() {
+		MynoObject ret(Myno::S);
+		ret.Collision = {
+			0b0110,
+			0b0011,
+			0b0000,
+			0b0000
+		};
+		return ret;
+	}
+	static MynoObject Z() {
+		MynoObject ret(Myno::Z);
+		ret.Collision = {
+			0b0011,
+			0b0110,
+			0b0000,
+			0b0000
+		};
+		return ret;
+	}
+	static MynoObject J() {
+		MynoObject ret(Myno::J);
+		ret.Collision = {
+			0b0001,
+			0b0111,
+			0b0000,
+			0b0000
+		};
+		return ret;
+	}
+	static MynoObject L() {
+		MynoObject ret(Myno::L);
+		ret.Collision = {
+			0b0100,
+			0b0111,
+			0b0000,
+			0b0000
+		};
+		return ret;
+	}
+	static MynoObject T() {
+		MynoObject ret(Myno::T);
+		ret.Collision = {
+			0b0010,
+			0b0111,
+			0b0000,
+			0b0000
+		};
+		return ret;
+	}
+	static MynoObject Make(Myno t) {
+		switch (t) {
+			case Myno::I: return I();
+			case Myno::O: return O();
+			case Myno::S: return S();
+			case Myno::Z: return Z();
+			case Myno::J: return J();
+			case Myno::L: return L();
+			case Myno::T: return T();
+		}
+		return MynoObject(t);
+	}
+
+	void MoveLeft() {
+		x -= 1;
+	}
+	void MoveRight() {
+		x += 1;
+	}
+	void MoveDown() {
+		y += 1;
+	}
+	void MoveUp() {
+		y -= 1;
+	}
+	void Rotate(bool LR) {
+		Collision = (!LR) ? (LRotateImpl()) : (RRotateImpl());
+	}
+	void RotateLeft() {
+		Rotate(false);
+	}
+	void RotateRight() {
+		Rotate(true);
+	}
+	void SetPosition(int _x, int _y) {
+		x = _x; y = _y;
+	}
+	void AddPosition(int _x, int _y) {
+		x += _x; y += _y;
+	}
+	std::pair<int, int> GetPosition() const {
+		return {x, y};
+	}
+	std::pair<int, int> GetFieldSize() const {
+		return (Type == Myno::I || Type == Myno::O) ? std::pair{4, 4} : std::pair{3, 3};
+	}
+	const inner_field& GetCollision() const {
+		return Collision;
+	}
+	Myno GetType() const {
+		return Type;
+	}
+	template<class T = Direction>
+	T GetDirection() const {
+		return static_cast<T>(Dir);
+	}
+	template<class T = Direction>
+	T GetDirectionPrevRight() const {
+		constexpr int8_t P = static_cast<int8_t>(Direction::Count);
+		return static_cast<T>(((GetDirection<int8_t>() - 1) % P + P) % P);
+	}
+	template<class T = Direction>
+	T GetDirectionPrevLeft() const {
+		constexpr int8_t P = static_cast<int8_t>(Direction::Count);
+		return static_cast<T>(((GetDirection<int8_t>() + 1) % P + P) % P);
+	}
+	
+};
+
+class Game {
+	
+	libarrier::Timer InGameTimer;
+	InputFlag Keyboard[256]{};
+
+	std::string BoardOutPut;
+	bool End = false;
+
+	uint64_t Score = 0;
+	
+	std::deque<std::deque<Myno>> BagQueue;
+	void MakeMynoSets() {
+		static std::random_device device;
+		std::mt19937 gen(device());
+
+		std::deque<Myno> ret = {Myno::I, Myno::O, Myno::S, Myno::Z, Myno::J, Myno::L, Myno::T};
+		std::shuffle(ret.begin(), ret.end(), gen);
+		BagQueue.push_back(std::move(ret));
+	}
+	Myno GetMynoQueue() {
+		auto& frontbag = BagQueue.front();
+		auto ret = std::move(frontbag.front());
+		frontbag.pop_front();
+		if (frontbag.empty()) {
+			BagQueue.pop_front();
+			MakeMynoSets();
+		}
+		return ret;
+	}
+
+	int Width = 0;
+	int Height = 0;
+	std::vector<std::vector<Myno>> Board;
+	bool CheckInBoard(const MynoObject& obj) {
+		auto [w, h] = obj.GetFieldSize();
+		auto [x, y] = obj.GetPosition();
+		auto& c = obj.GetCollision();
+		for (int j = 0; j < h; ++j) {
+			for (int i = 0; i < w; ++i) {
+				if (!c[j][i]) {
+					continue;
+				}
+				if (!(0 <= x + i && x + i < Width)) {
+					return false;
+				}
+				if (!(0 <= y + j && y + j < Height)) {
+					return false;
+				}
+				auto& ref = Board[y + j][x + i];
+				if (!(ref == Myno::Null || ref == obj.GetType() || (bool)(ref & Myno::DummyBit))) {
+					return false;
+				}
+			}
+		}
+		return true;
+	}
+	void PlaceBoard(const MynoObject& obj, bool place, bool clear, bool preview) {
+		auto [w, h] = obj.GetFieldSize();
+		auto [x, y] = obj.GetPosition();
+		auto& c = obj.GetCollision();
+		for (int j = 0; j < h; ++j) {
+			for (int i = 0; i < w; ++i) {
+				if (!c[j][i]) {
+					continue;
+				}
+				auto& ref = Board[y + j][x + i];
+				if (clear) {
+					ref = Myno::Null;
+					continue;
+				}
+				if (place) {
+					ref = obj.GetType() | Myno::PlaceBit;
+					continue;
+				}
+				if (preview) {
+					ref = obj.GetType() | Myno::DummyBit;
+					continue;
+				}
+				ref = obj.GetType();
+			}
+		}
+	}
+	void ClearBoardPrev(const MynoObject& obj) {
+		PlaceBoard(obj, false, true, false);
+	}
+	void PlaceBoard(const MynoObject& obj) {
+		PlaceBoard(obj, false, false, false);
+	}
+	void ApplyBoard(const MynoObject& obj) {
+		PlaceBoard(obj, true, false, false);
+		int clearcount = LineClear();
+	}
+	void PreviewBoard(const MynoObject& obj) {
+		PlaceBoard(obj, false, false, true);
+	}
+	int LineClear() {
+		std::deque<size_t> clearline;
+		for (auto it = Board.rbegin(), end = Board.rend(); it != end; ++it) {
+			auto& line = *it;
+			bool clear = true;
+			for (const auto& myno : line) {
+				if ((bool)(myno & Myno::PlaceBit)) {
+					continue;
+				}
+				if (myno == Myno::Null) {
+					clear = false;
+					break;
+				}
+				else if ((bool)(myno & Myno::DummyBit)) {
+					clear = false;
+					break;
+				}
+			}
+			if (clear) {
+				for (auto& myno : line) {
+					myno = Myno::Null;
+				}
+				clearline.push_back(end - it - 1);
+			}
+		}
+		int count = clearline.size();
+		size_t offset = 0;
+		while (!clearline.empty()) {
+			size_t ibeg = clearline.front(); clearline.pop_front();
+			size_t iend = (clearline.empty() ? 0 : clearline.front());
+			for (size_t i = ibeg; i != iend; --i) {
+				size_t idx = i + offset;
+				if (idx >= Board.size()) {
+					break;
+				}
+				std::swap(Board[idx], Board[idx - offset - 1]);
+			}
+			offset += 1;
+		}
+		return count;
+	}
+	void DrawBoard() {
+		BoardOutPut.clear();
+		for (auto& line : Board) {
+			BoardOutPut += GetColorEscape(0xffffff) + "██";
+			for (auto& myno : line) {
+				std::string box(20, '\0');
+				bool dummy = (bool)(myno & Myno::DummyBit);
+				auto m = myno & ~(uint8_t)(Myno::DummyBit | Myno::PlaceBit);
+				switch (m) {
+				case Myno::Null:
+					box += GetColorEscape(Color::Default);
+					break;
+				case Myno::I:
+					box += GetColorEscape(Color::Cyan);
+					break;
+				case Myno::O:
+					box += GetColorEscape(Color::Yellow);
+					break;
+				case Myno::S:
+					box += GetColorEscape(Color::Green);
+					break;
+				case Myno::Z:
+					box += GetColorEscape(Color::Red);
+					break;
+				case Myno::J:
+					box += GetColorEscape(Color::Blue);
+					break;
+				case Myno::L:
+					box += GetColorEscape(Color::Orange);
+					break;
+				case Myno::T:
+					box += GetColorEscape(Color::Purple);
+					break;
+				}
+				box += (myno != Myno::Null) ? ((dummy) ? ("□") : ("██")) : ("  ");
+				box += GetColorEscape(Color::Default);
+				BoardOutPut += box;
+			}
+			BoardOutPut += GetColorEscape(0xffffff) + "██" + GetColorEscape(Color::Default) + "\n";
+		}
+		fwrite(BoardOutPut.c_str(), sizeof(char), BoardOutPut.size(), stdout);
+	}
+
+	using tableline = std::array<std::pair<int, int>, 4>;
+	static constexpr auto SRSTableRight = std::array<tableline, 4>{
+		tableline{std::pair{-1,0}, {-1,-1}, {0,+2}, {-1,+2}}, // upper -> right
+		tableline{std::pair{+1,0}, {+1,+1}, {0,-2}, {+1,-2}}, // right -> lower
+		tableline{std::pair{+1,0}, {+1,-1}, {0,+2}, {+1,+2}}, // lower -> left
+		tableline{std::pair{-1,0}, {-1,+1}, {0,-2}, {-1,-2}}, // left  -> upper
+		// left rotate is negative x
+	};
+	static constexpr auto SRSTableLeft = []() {
+		std::decay_t<decltype(SRSTableRight)> ret;
+		for (size_t j = 0; auto& tl : SRSTableRight) {
+			for (size_t i = 0; auto& test : tl) {
+				auto& [dx, dy] = ret[j][i];
+				auto& [tx, ty] = test;
+				std::tie(dx, dy) = std::pair{-tx, ty};
+				++i;
+			}
+			++j;
+		}
+		return ret;
+	}();
+	static constexpr auto SRSTableIMynoRight = std::array<tableline, 4>{
+		tableline{std::pair{-2,0},{+1,0},{-2,+1},{+1,-2}},
+		tableline{std::pair{-1,0},{+2,0},{-1,-2},{+2,+1}},
+		tableline{std::pair{+2,0},{-1,0},{+2,+1},{-1,+2}},
+		tableline{std::pair{+1,0},{-2,0},{+1,-2},{-2,-1}},
+	};
+	static constexpr auto SRSTableIMynoLeft = []() {
+		std::decay_t<decltype(SRSTableIMynoRight)> ret;
+		for (size_t j = 0;  auto& tl : SRSTableIMynoRight) {
+			for (size_t i = 0; auto& test : tl) {
+				auto& [dx, dy] = ret[SRSTableIMynoRight.size() - 1 - j][i];
+				auto& [tx, ty] = test;
+				std::tie(dx, dy) = std::pair{-tx, ty};
+				++i;
+			}
+			++j;
+		}
+		return ret;
+	}();
+	int TableIndexConverter(bool LR, Direction cur) {
+		int ret = [=]() {
+			if (LR) {
+				switch (cur) {
+				case Direction::Upper: return 3;
+				case Direction::Right: return 0;
+				case Direction::Lower: return 1;
+				case Direction::Left: return 2;
+				}
+			}
+			else {
+				switch (cur) {
+				case Direction::Upper: return 3;
+				case Direction::Right: return 2;
+				case Direction::Lower: return 1;
+				case Direction::Left: return 0;
+				}
+			}
+		}();
+		return ret;
+	}
+	MynoObject Current;
+	MynoObject Preview;
+	libarrier::Timer LockTimer;
+	double LockTime = 0.5;
+	int LockCount = 0;
+	libarrier::Timer GravityTimer;
+	double GravityTime = 1;
+	double GravitySpeedRate = 1 - 0.000125;
+	double SoftDropRate = 0.03125;
+	void SetCurrent(Myno t) {
+		Current = MynoObject::Make(t);
+		auto [w, _] = Current.GetFieldSize();
+		Current.SetPosition(Width / 2 - 2, 0);
+		if (!CheckInBoard(Current)) {
+			End = true;
+		}
+	}
+	void CurrentMoveLeft() {
+		if (auto temp = Current; !CheckInBoard((temp.MoveLeft(), temp))) {
+			return;
+		}
+		ClearBoardPrev(Current);
+		Current.MoveLeft();
+		CurrentPreview();
+		PlaceBoard(Current);
+		LockTimeInMove();
+	}
+	void CurrentMoveRight() {
+		if (auto temp = Current; !CheckInBoard((temp.MoveRight(), temp))) {
+			return;
+		}
+		ClearBoardPrev(Current);
+		Current.MoveRight();
+		CurrentPreview();
+		PlaceBoard(Current);
+		LockTimeInMove();
+	}
+	void CurrentRotateLeft() {
+		int x = 0;
+		int y = 0;
+		if (auto temp = Current; !CheckInBoard((temp.RotateLeft(), temp))) {
+			int tableidx = TableIndexConverter(false, temp.GetDirection());
+			auto& table = (temp.GetType() == Myno::I) ? SRSTableIMynoLeft : SRSTableLeft;
+			bool testfound = false;
+			for (auto [tx, ty] : table[tableidx]) {
+				auto test = temp;
+				test.AddPosition(tx, ty);
+				if (CheckInBoard(test)) {
+					x = tx;
+					y = ty;
+					testfound = true;
+					break;
+				}
+			}
+			if (!testfound) {
+				return;
+			}
+		}
+		ClearBoardPrev(Current);
+		Current.AddPosition(x, y);
+		Current.RotateLeft();
+		CurrentPreview();
+		PlaceBoard(Current);
+		LockTimeInMove();
+	}
+	void CurrentRotateRight() {
+		int x = 0;
+		int y = 0;
+		if (auto temp = Current; !CheckInBoard((temp.RotateRight(), temp))) {
+			int tableidx = TableIndexConverter(true, temp.GetDirection());
+			auto& table = (temp.GetType() == Myno::I) ? SRSTableIMynoRight : SRSTableRight;
+			bool testfound = false;
+			for (auto [tx, ty] : table[tableidx]) {
+				auto test = temp;
+				test.AddPosition(tx, ty);
+				if (CheckInBoard(test)) {
+					x = tx;
+					y = ty;
+					testfound = true;
+					break;
+				}
+			}
+			if (!testfound) {
+				return;
+			}
+		}
+		ClearBoardPrev(Current);
+		Current.RotateRight();
+		Current.AddPosition(x, y);
+		CurrentPreview();
+		PlaceBoard(Current);
+		LockTimeInMove();
+	}
+	void CurrentSoftDrop() {
+		if (auto temp = Current; !CheckInBoard((temp.MoveDown(), temp))) {
+			if (!LockTimer.IsRunning()) {
+				LockTimer.Start();
+			}
+			return;
+		}
+		ClearBoardPrev(Current);
+		Current.MoveDown();
+		PlaceBoard(Current);
+	}
+	void CurrentHardDrop() {
+		auto [x, y] = Current.GetPosition();
+		while (true) {
+			auto test = Current;
+			test.SetPosition(x, y + 1);
+			if (!CheckInBoard(test)) {
+				break;
+			}
+			y += 1;
+			if (y >= Height) {
+				return;
+			}
+		}
+		ClearBoardPrev(Current);
+		Current.SetPosition(x, y);
+		ApplyBoard(Current);
+		Next();
+	}
+	void CurrentPreview(bool clear = true) {
+		auto [x, y] = Current.GetPosition();
+		while (true) {
+			auto test = Current;
+			test.SetPosition(x, y + 1);
+			if (!CheckInBoard(test)) {
+				break;
+			}
+			y += 1;
+			if (y >= Height) {
+				return;
+			}
+		}
+		if (clear) { ClearBoardPrev(Preview); }
+		Preview = Current;
+		Preview.SetPosition(x, y);
+		PreviewBoard(Preview);
+	}
+	void LockTimeInMove() {
+		if (!LockTimer.IsRunning() || LockCount >= 15) {
+			return;
+		}
+		else if (auto temp = Current; !CheckInBoard((temp.MoveDown(), temp))) {
+			LockTimer.Reset();
+			return;
+		}
+		LockTimer.Start();
+		LockCount += 1;
+	}
+	void ResetLockTime() {
+		LockTimer.Reset();
+		LockCount = 0;
+	}
+	void Next() {
+		SetCurrent(GetMynoQueue());
+		CurrentPreview(false);
+		PlaceBoard(Current);
+		ResetLockTime();
+		GravityTimer.Start();
+	}
+	void DebugNext() {
+		ClearBoardPrev(Current);
+		Next();
+	}
+
+	Myno Hold = Myno::Null;
+	void SwapHold() {
+		ClearBoardPrev(Current);
+		Myno t = Current.GetType();
+		SetCurrent(Hold);
+		Hold = t;
+		if (Current.GetType() == Myno::Null) {
+			ClearBoardPrev(Preview);
+			Next();
+			return;
+		}
+		CurrentPreview();
+		PlaceBoard(Current);
+		ResetLockTime();
+	}
+
+public:
+
+	void Init(int w, int h) {
+		Width = w;
+		Height = h + 4;
+		BoardOutPut.reserve(65536);
+		Board.resize(Height);
+		bool xflag = false;
+		bool yflag = false;
+		for (auto& line : Board) {
+			line.resize(Width);
+			for (auto& myno : line) {
+				// random includs color and dummy
+				//myno = static_cast<Myno>(((rand() % 7) + 1) | (0x80 & (((uint8_t)rand() & 1) - 1)));
+
+				// random color
+				//myno = static_cast<Myno>(((rand() % 7) + 1) * (int)(xflag || yflag));
+
+				// set null
+				myno = Myno::Null;
+				yflag = !yflag;
+			}
+			xflag = !xflag;
+		}
+		for (int i = 0; i < 3; ++i) {
+			MakeMynoSets();
+		}
+		Next();
+		GravityTimer.Start();
+		InGameTimer.Start();
+	}
+	bool GameEnd() {
+		return End;
+	}
+	void Proc(bool* key) {
+		for (size_t i = 0; auto& k : Keyboard) {
+			k.Update(key[i]);
+			++i;
+		}
+
+		if (LockTimer.GetElapsed().Second() > LockTime) {
+			ApplyBoard(Current);
+			Next();
+		}
+		if (GravityTimer.GetElapsed().Second() > GravityTime * (Keyboard['S'].Press() ? SoftDropRate : 1)) {
+			GravityTimer.Start();
+			CurrentSoftDrop();
+		}
+		if (InGameTimer.GetElapsed().Second() > 1) {
+			GravityTime *= GravitySpeedRate;
+		}
+
+		if (Keyboard[VK_ESCAPE].Down()) {
+			End = true;
+		}
+
+		if (Keyboard['P'].Down()) {
+			DebugNext();
+		}
+
+		if (Keyboard['A'].Down()) {
+			CurrentMoveLeft();
+		}
+		if (Keyboard['D'].Down()) {
+			CurrentMoveRight();
+		}
+		if (Keyboard[VK_SPACE].Down()) {
+			CurrentHardDrop();
+		}
+		if (Keyboard[VK_LSHIFT].Down()) {
+			SwapHold();
+		}
+
+		if (Keyboard['J'].Down()) {
+			CurrentRotateLeft();
+		}
+		if (Keyboard['L'].Down()) {
+			CurrentRotateRight();
+		}
+	}
+	void Draw() {
+		DrawBoard();
+	}
+};
