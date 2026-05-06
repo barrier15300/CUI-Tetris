@@ -49,6 +49,10 @@ _def_logic_op(| );
 _def_logic_op(^);
 #undef _def_logic_op
 
+static inline std::string operator+(std::string_view lhs, std::string_view rhs) { return std::string(lhs) + std::string(rhs); }
+static inline std::string operator+(std::string_view lhs, const std::string& rhs) { return std::string(lhs) + rhs; }
+static inline std::string operator+(const std::string& lhs, std::string_view rhs) { return lhs + std::string(rhs); }
+
 enum class Direction : uint8_t {
 	Upper,
 	Right,
@@ -247,9 +251,9 @@ public:
 
 class Game {
 	
-	static constexpr std::string Block = "██";
-	static constexpr std::string EdgeBlock = "□";
-	static constexpr std::string None = "  ";
+	static constexpr std::string_view Block = "██";
+	static constexpr std::string_view EdgeBlock = "□";
+	static constexpr std::string_view None = "  ";
 	static void DrawString(const std::string& str) {
 		fwrite(str.c_str(), sizeof(char), str.size(), stdout);
 	}
@@ -258,14 +262,15 @@ class Game {
 	InputFlag Keyboard[256]{};
 
 	std::string BoardOutPut;
-	bool End = false;
+	bool EndFlag = false;
 
+	uint64_t Line = 0;
 	uint64_t Score = 0;
 	uint32_t Combo = 0;
 	uint32_t B2B = 0;
 	bool Spin = false;
 	void DrawScore() {
-		DrawString(std::format("Score: {:0>12}\nCombo: {}\nB2B: {}", Score, Combo, B2B));
+		DrawString(std::format("Score: {:0>12}\nLine: {}\nCombo: {}\nB2B: {}", Score, Line, Combo, B2B));
 	}
 	
 	std::deque<std::deque<Myno>> BagQueue;
@@ -359,12 +364,13 @@ class Game {
 		Myno t = Current.GetType();
 		int nearcount = PlaceBoard(obj, true, false, false);
 		int clearcount = LineClear();
+		bool perfect = IsPerfect();
 		if (clearcount == 0) {
 			Score += 100;
 			Combo = 0;
 			return;
 		}
-		Score += 1000 * clearcount;
+		Score += (1000 + ((int)perfect * 1000)) * clearcount;
 		Score += 200 * Combo;
 		Score += 200 * B2B;
 		(clearcount == 4 || (t == Myno::T && nearcount >= 3 && Spin)) ? (B2B += 1) : (B2B = 0);
@@ -414,6 +420,16 @@ class Game {
 			offset += 1;
 		}
 		return count;
+	}
+	bool IsPerfect() {
+		for (auto& line : Board) {
+			for (auto& t : line) {
+				if (t != Myno::Null) {
+					return false;
+				}
+			}
+		}
+		return true;
 	}
 	void DrawBoard() {
 		BoardOutPut.clear();
@@ -537,7 +553,7 @@ class Game {
 		auto [w, _] = Current.GetFieldSize();
 		Current.SetPosition(Width / 2 - 2, 0);
 		if (!CheckInBoard(Current)) {
-			End = true;
+			EndFlag = true;
 		}
 	}
 	void CurrentMoveLeft() {
@@ -742,8 +758,11 @@ public:
 		GravityTimer.Start();
 		InGameTimer.Start();
 	}
-	bool GameEnd() {
-		return End;
+	void End() {
+		system("cls");
+	}
+	bool IsGameEnd() const {
+		return EndFlag;
 	}
 	void Proc(bool* key) {
 		for (size_t i = 0; auto& k : Keyboard) {
@@ -768,7 +787,7 @@ public:
 		}
 
 		if (Keyboard[VK_ESCAPE].Down()) {
-			End = true;
+			EndFlag = true;
 		}
 		if (Keyboard['A'].Down()) {
 			CurrentMoveLeft();

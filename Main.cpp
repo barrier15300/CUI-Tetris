@@ -33,7 +33,7 @@ int main(int argc, char** argv) {
 	bool key[256]{};
 
 	Game game;
-	game.Init(10, 20);
+	game.Init(4, 20);
 
 	while (true) {
 
@@ -46,7 +46,7 @@ int main(int argc, char** argv) {
 			break;
 		}
 
-		if (game.GameEnd()) {
+		if (game.IsGameEnd()) {
 			break;
 		}
 
@@ -59,7 +59,7 @@ int main(int argc, char** argv) {
 		std::this_thread::sleep_until(tp += frame);
 	}
 
-	system("cls");
+	game.End();
 
 	return 0;
 }
