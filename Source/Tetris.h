@@ -6,6 +6,7 @@
 #include <random>
 #include <bitset>
 #include <complex>
+#include <string_view>
 
 #include "Escape.h"
 #include "Input.h"
@@ -246,6 +247,13 @@ public:
 
 class Game {
 	
+	static constexpr std::string Block = "██";
+	static constexpr std::string EdgeBlock = "□";
+	static constexpr std::string None = "  ";
+	static void DrawString(const std::string& str) {
+		fwrite(str.c_str(), sizeof(char), str.size(), stdout);
+	}
+
 	libarrier::Timer InGameTimer;
 	InputFlag Keyboard[256]{};
 
@@ -253,6 +261,12 @@ class Game {
 	bool End = false;
 
 	uint64_t Score = 0;
+	uint32_t Combo = 0;
+	uint32_t B2B = 0;
+	bool Spin = false;
+	void DrawScore() {
+		DrawString(std::format("Score: {:0>12}\nCombo: {}\nB2B: {}", Score, Combo, B2B));
+	}
 	
 	std::deque<std::deque<Myno>> BagQueue;
 	void MakeMynoSets() {
@@ -300,16 +314,24 @@ class Game {
 		}
 		return true;
 	}
-	void PlaceBoard(const MynoObject& obj, bool place, bool clear, bool preview) {
+	int PlaceBoard(const MynoObject& obj, bool place, bool clear, bool preview) {
 		auto [w, h] = obj.GetFieldSize();
 		auto [x, y] = obj.GetPosition();
 		auto& c = obj.GetCollision();
+		int nearcount = 0;
 		for (int j = 0; j < h; ++j) {
 			for (int i = 0; i < w; ++i) {
-				if (!c[j][i]) {
+				if (!(0 <= x + i && x + i < Width && 0 <= y + j && y + j < Height)) {
+					nearcount += 1;
 					continue;
 				}
 				auto& ref = Board[y + j][x + i];
+				if ((bool)(ref & Myno::PlaceBit)) {
+					nearcount += 1;
+				}
+				if (!c[j][i]) {
+					continue;
+				}
 				if (clear) {
 					ref = Myno::Null;
 					continue;
@@ -325,6 +347,7 @@ class Game {
 				ref = obj.GetType();
 			}
 		}
+		return nearcount;
 	}
 	void ClearBoardPrev(const MynoObject& obj) {
 		PlaceBoard(obj, false, true, false);
@@ -333,8 +356,20 @@ class Game {
 		PlaceBoard(obj, false, false, false);
 	}
 	void ApplyBoard(const MynoObject& obj) {
-		PlaceBoard(obj, true, false, false);
+		Myno t = Current.GetType();
+		int nearcount = PlaceBoard(obj, true, false, false);
 		int clearcount = LineClear();
+		if (clearcount == 0) {
+			Score += 100;
+			Combo = 0;
+			return;
+		}
+		Score += 1000 * clearcount;
+		Score += 200 * Combo;
+		Score += 200 * B2B;
+		(clearcount == 4 || (t == Myno::T && nearcount >= 3 && Spin)) ? (B2B += 1) : (B2B = 0);
+		Spin = false;
+		Combo += 1;
 	}
 	void PreviewBoard(const MynoObject& obj) {
 		PlaceBoard(obj, false, false, true);
@@ -383,7 +418,7 @@ class Game {
 	void DrawBoard() {
 		BoardOutPut.clear();
 		for (auto& line : Board) {
-			BoardOutPut += GetColorEscape(0xffffff) + "██";
+			BoardOutPut += GetColorEscape(0xffffff) + Block;
 			for (auto& myno : line) {
 				std::string box(20, '\0');
 				bool dummy = (bool)(myno & Myno::DummyBit);
@@ -414,13 +449,17 @@ class Game {
 					box += GetColorEscape(Color::Purple);
 					break;
 				}
-				box += (myno != Myno::Null) ? ((dummy) ? ("□") : ("██")) : ("  ");
+				box += (myno != Myno::Null) ? ((dummy) ? (EdgeBlock) : (Block)) : (None);
 				box += GetColorEscape(Color::Default);
 				BoardOutPut += box;
 			}
-			BoardOutPut += GetColorEscape(0xffffff) + "██" + GetColorEscape(Color::Default) + "\n";
+			BoardOutPut += GetColorEscape(0xffffff) + Block + GetColorEscape(Color::Default) + "\n";
 		}
-		fwrite(BoardOutPut.c_str(), sizeof(char), BoardOutPut.size(), stdout);
+		for (int i = 0; i < Width + 2; ++i) {
+			BoardOutPut += GetColorEscape(0xffffff) + Block + GetColorEscape(Color::Default);
+		}
+		BoardOutPut += "\n";
+		DrawString(BoardOutPut);
 	}
 
 	using tableline = std::array<std::pair<int, int>, 4>;
@@ -548,6 +587,7 @@ class Game {
 		CurrentPreview();
 		PlaceBoard(Current);
 		LockTimeInMove();
+		CurrentSpinFlag();
 	}
 	void CurrentRotateRight() {
 		int x = 0;
@@ -576,17 +616,16 @@ class Game {
 		CurrentPreview();
 		PlaceBoard(Current);
 		LockTimeInMove();
+		CurrentSpinFlag();
 	}
 	void CurrentSoftDrop() {
 		if (auto temp = Current; !CheckInBoard((temp.MoveDown(), temp))) {
-			if (!LockTimer.IsRunning()) {
-				LockTimer.Start();
-			}
 			return;
 		}
 		ClearBoardPrev(Current);
 		Current.MoveDown();
 		PlaceBoard(Current);
+		LockTimeInMove();
 	}
 	void CurrentHardDrop() {
 		auto [x, y] = Current.GetPosition();
@@ -624,11 +663,15 @@ class Game {
 		Preview.SetPosition(x, y);
 		PreviewBoard(Preview);
 	}
+	void CurrentSpinFlag() {
+		auto temp = Current;
+		Spin = !CheckInBoard((temp.MoveDown(), temp));
+	}
 	void LockTimeInMove() {
-		if (!LockTimer.IsRunning() || LockCount >= 15) {
+		if (LockCount >= 15) {
 			return;
 		}
-		else if (auto temp = Current; !CheckInBoard((temp.MoveDown(), temp))) {
+		else if (auto temp = Current; CheckInBoard((temp.MoveDown(), temp))) {
 			LockTimer.Reset();
 			return;
 		}
@@ -638,6 +681,7 @@ class Game {
 	void ResetLockTime() {
 		LockTimer.Reset();
 		LockCount = 0;
+		LockTimeInMove();
 	}
 	void Next() {
 		SetCurrent(GetMynoQueue());
@@ -749,5 +793,6 @@ public:
 	}
 	void Draw() {
 		DrawBoard();
+		DrawScore();
 	}
 };
