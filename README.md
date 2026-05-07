@@ -1,5 +1,9 @@
 # CUI-Tetris
 
+<img width="466" height="713" alt="image" src="https://github.com/user-attachments/assets/d4509457-0866-4ef7-8e70-b602db227ba3" />
+
+---
+
 コマンドプロンプト上で遊べるテトリスです
 
 C++20で記述していますが、内部ロジックはシンプルです
