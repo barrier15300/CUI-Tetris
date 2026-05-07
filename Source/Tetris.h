@@ -630,7 +630,7 @@ class Game {
 	double SoftDropRate = 0.03125;
 	char MoveState = '\0';
 	libarrier::Timer MoveTimer;
-	double MoveTime = 0.1;
+	double MoveTime = 0.15;
 	void SetCurrent(Myno t) {
 		Current = MynoObject::Make(t);
 		auto [w, _] = Current.GetFieldSize();
@@ -872,6 +872,7 @@ public:
 	}
 	void End() {
 		PutString(escape::LineMoveNext());
+		system("pause");
 	}
 	bool IsGameEnd() const {
 		return EndFlag;
