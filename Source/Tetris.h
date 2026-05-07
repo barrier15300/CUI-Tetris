@@ -626,7 +626,7 @@ class Game {
 	int LockCount = 0;
 	libarrier::Timer GravityTimer;
 	double GravityTime = 1;
-	double GravitySpeedRate = 1 - 0.00025;
+	double GravitySpeedRate = 1 - 0.0000625;
 	double SoftDropRate = 0.03125;
 	char MoveState = '\0';
 	libarrier::Timer MoveTimer;
