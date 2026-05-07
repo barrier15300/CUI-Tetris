@@ -49,9 +49,9 @@ _def_logic_op(| );
 _def_logic_op(^);
 #undef _def_logic_op
 
-static inline std::string operator+(std::string_view lhs, std::string_view rhs) { return std::string(lhs) + std::string(rhs); }
-static inline std::string operator+(std::string_view lhs, const std::string& rhs) { return std::string(lhs) + rhs; }
-static inline std::string operator+(const std::string& lhs, std::string_view rhs) { return lhs + std::string(rhs); }
+static const inline std::string Block = "██";
+static const inline std::string EdgeBlock = "░░";
+static const inline std::string None = "  ";
 
 enum class Direction : uint8_t {
 	Upper,
@@ -246,22 +246,95 @@ public:
 		constexpr int8_t P = static_cast<int8_t>(Direction::Count);
 		return static_cast<T>(((GetDirection<int8_t>() + 1) % P + P) % P);
 	}
-	
+	static std::string GetBox(Myno t)  {
+		std::string ret;
+		bool dummy = (bool)(t & Myno::DummyBit);
+		auto m = t & ~(uint8_t)(Myno::DummyBit | Myno::PlaceBit);
+		switch (m) {
+		case Myno::Null:
+			ret += escape::Color(RGBColor::Default);
+			break;
+		case Myno::I:
+			ret += escape::Color(RGBColor::Cyan);
+			break;
+		case Myno::O:
+			ret += escape::Color(RGBColor::Yellow);
+			break;
+		case Myno::S:
+			ret += escape::Color(RGBColor::Green);
+			break;
+		case Myno::Z:
+			ret += escape::Color(RGBColor::Red);
+			break;
+		case Myno::J:
+			ret += escape::Color(RGBColor::Blue);
+			break;
+		case Myno::L:
+			ret += escape::Color(RGBColor::Orange);
+			break;
+		case Myno::T:
+			ret += escape::Color(RGBColor::Purple);
+			break;
+		}
+		ret += (t != Myno::Null) ? ((dummy) ? (EdgeBlock) : (Block)) : (None);
+		return ret;
+	}
 };
 
 class Game {
-	
-	static constexpr std::string_view Block = "██";
-	static constexpr std::string_view EdgeBlock = "□";
-	static constexpr std::string_view None = "  ";
-	static void DrawString(const std::string& str) {
-		fwrite(str.c_str(), sizeof(char), str.size(), stdout);
-	}
 
 	libarrier::Timer InGameTimer;
 	InputFlag Keyboard[256]{};
 
-	std::string BoardOutPut;
+	std::string ScreenOutput;
+	void MargeOutput(std::initializer_list<std::string_view> buffers) {
+		ScreenOutput.clear();
+		HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+		std::vector<std::string_view> buf = buffers;
+		static auto count = [&]() {
+			std::vector<size_t> ret;
+			for (auto& b : buf) {
+				if (b.empty()) {
+					continue;
+				}
+				size_t e = b.find(escape::LineMoveNext());
+				ScreenOutput += b.substr(0, e);
+				b = b.substr(e);
+				PutString(ScreenOutput);
+				CONSOLE_SCREEN_BUFFER_INFO csbi;
+				GetConsoleScreenBufferInfo(hConsole, &csbi);
+				if (ret.empty()) {
+					ret.push_back(csbi.dwCursorPosition.X);
+					continue;
+				}
+				ret.push_back(csbi.dwCursorPosition.X - ret.back());
+				PutString(escape::LineMoveBegin());
+			}
+			return ret;
+		}();
+
+		while (true) {
+			bool breakflag = true;
+			for (size_t i = -1; auto& b : buf) {
+				++i;
+				if (b.empty()) {
+					ScreenOutput += escape::Color(RGBColor::Default);
+					ScreenOutput += std::string(count[i], ' ');
+					continue;
+				}
+				breakflag = false;
+				size_t e = b.find(escape::LineMoveNext());
+				ScreenOutput += b.substr(0, e);
+				b = b.substr(e + 1);
+			}
+			if (breakflag) {
+				break;
+			}
+			ScreenOutput += escape::LineMoveNext();
+		}
+		ScreenOutput += escape::LineMoveBegin();
+	}
+
 	bool EndFlag = false;
 
 	uint64_t Line = 0;
@@ -269,11 +342,20 @@ class Game {
 	uint32_t Combo = 0;
 	uint32_t B2B = 0;
 	bool Spin = false;
-	void DrawScore() {
-		DrawString(std::format("Score: {:0>12}\nLine: {}\nCombo: {}\nB2B: {}", Score, Line, Combo, B2B));
+	void DrawScore() const {
+		PutString(rformat(
+			"Time:  {:0.3f}s" + escape::LineMoveNext() +
+			"Score: {:0>12}" + escape::LineMoveNext() +
+			"Line:  {}" + escape::LineMoveNext() +
+			"Combo: {}" + escape::LineMoveNext() +
+			"B2B:   {}" + escape::LineMoveNext(),
+			InGameTimer.GetElapsed().Second(), Score, Line, Combo, B2B
+		));
 	}
 	
 	std::deque<std::deque<Myno>> BagQueue;
+	int NextCount = 5;
+	std::string QueueOutput;
 	void MakeMynoSets() {
 		static std::random_device device;
 		std::mt19937 gen(device());
@@ -292,10 +374,29 @@ class Game {
 		}
 		return ret;
 	}
+	void DrawQueue() {
+		QueueOutput.clear();
+		for (int n = 0; n < NextCount; ++n) {
+			Myno t = (n < BagQueue[0].size() ? BagQueue[0][n] : BagQueue[1][n - BagQueue[0].size()]);
+			auto obj = MynoObject::Make(t);
+			auto& c = obj.GetCollision();
+			for (int j = 0; j < c.size(); ++j) {
+				for (int i = 0; i < c[j].size(); ++i) {
+					QueueOutput += (c[j][i] ? MynoObject::GetBox(t) : MynoObject::GetBox(Myno::Null));
+				}
+				QueueOutput += GetBorder() + escape::LineMoveNext();
+			}
+			for (int i = 0; i < c.size() + 1; ++i) {
+				QueueOutput += GetBorder();
+			}
+			QueueOutput += escape::LineMoveNext();
+		}
+	}
 
 	int Width = 0;
 	int Height = 0;
 	std::vector<std::vector<Myno>> Board;
+	std::string BoardOutput;
 	bool CheckInBoard(const MynoObject& obj) {
 		auto [w, h] = obj.GetFieldSize();
 		auto [x, y] = obj.GetPosition();
@@ -361,6 +462,7 @@ class Game {
 		PlaceBoard(obj, false, false, false);
 	}
 	void ApplyBoard(const MynoObject& obj) {
+		HoldOnce = false;
 		Myno t = Current.GetType();
 		int nearcount = PlaceBoard(obj, true, false, false);
 		int clearcount = LineClear();
@@ -370,6 +472,7 @@ class Game {
 			Combo = 0;
 			return;
 		}
+		Line += clearcount;
 		Score += (1000 + ((int)perfect * 1000)) * clearcount;
 		Score += 200 * Combo;
 		Score += 200 * B2B;
@@ -431,51 +534,28 @@ class Game {
 		}
 		return true;
 	}
+	static std::string GetBorder() {
+		return escape::Color(0xffffff) + Block + escape::Color(RGBColor::Default);
+	}
+	static std::string GetNone() {
+		return escape::Color(RGBColor::Default) + None;
+	}
 	void DrawBoard() {
-		BoardOutPut.clear();
+		BoardOutput.clear();
 		for (auto& line : Board) {
-			BoardOutPut += GetColorEscape(0xffffff) + Block;
+			BoardOutput += escape::Color(0xffffff) + Block;
 			for (auto& myno : line) {
 				std::string box(20, '\0');
-				bool dummy = (bool)(myno & Myno::DummyBit);
-				auto m = myno & ~(uint8_t)(Myno::DummyBit | Myno::PlaceBit);
-				switch (m) {
-				case Myno::Null:
-					box += GetColorEscape(Color::Default);
-					break;
-				case Myno::I:
-					box += GetColorEscape(Color::Cyan);
-					break;
-				case Myno::O:
-					box += GetColorEscape(Color::Yellow);
-					break;
-				case Myno::S:
-					box += GetColorEscape(Color::Green);
-					break;
-				case Myno::Z:
-					box += GetColorEscape(Color::Red);
-					break;
-				case Myno::J:
-					box += GetColorEscape(Color::Blue);
-					break;
-				case Myno::L:
-					box += GetColorEscape(Color::Orange);
-					break;
-				case Myno::T:
-					box += GetColorEscape(Color::Purple);
-					break;
-				}
-				box += (myno != Myno::Null) ? ((dummy) ? (EdgeBlock) : (Block)) : (None);
-				box += GetColorEscape(Color::Default);
-				BoardOutPut += box;
+				box += MynoObject::GetBox(myno);
+				box += escape::Color(RGBColor::Default);
+				BoardOutput += box;
 			}
-			BoardOutPut += GetColorEscape(0xffffff) + Block + GetColorEscape(Color::Default) + "\n";
+			BoardOutput += GetBorder() + escape::LineMoveNext();
 		}
 		for (int i = 0; i < Width + 2; ++i) {
-			BoardOutPut += GetColorEscape(0xffffff) + Block + GetColorEscape(Color::Default);
+			BoardOutput += GetBorder();
 		}
-		BoardOutPut += "\n";
-		DrawString(BoardOutPut);
+		BoardOutput += escape::LineMoveNext();
 	}
 
 	using tableline = std::array<std::pair<int, int>, 4>;
@@ -546,8 +626,11 @@ class Game {
 	int LockCount = 0;
 	libarrier::Timer GravityTimer;
 	double GravityTime = 1;
-	double GravitySpeedRate = 1 - 0.000125;
+	double GravitySpeedRate = 1 - 0.00025;
 	double SoftDropRate = 0.03125;
+	char MoveState = '\0';
+	libarrier::Timer MoveTimer;
+	double MoveTime = 0.1;
 	void SetCurrent(Myno t) {
 		Current = MynoObject::Make(t);
 		auto [w, _] = Current.GetFieldSize();
@@ -711,12 +794,18 @@ class Game {
 		Next();
 	}
 
-	Myno Hold = Myno::Null;
+	MynoObject Hold;
+	bool HoldOnce = false;
+	std::string HoldOutput;
 	void SwapHold() {
+		if (HoldOnce) {
+			return;
+		}
+		HoldOnce = true;
 		ClearBoardPrev(Current);
 		Myno t = Current.GetType();
-		SetCurrent(Hold);
-		Hold = t;
+		SetCurrent(Hold.GetType());
+		Hold = MynoObject::Make(t);
 		if (Current.GetType() == Myno::Null) {
 			ClearBoardPrev(Preview);
 			Next();
@@ -726,13 +815,36 @@ class Game {
 		PlaceBoard(Current);
 		ResetLockTime();
 	}
+	void DrawHold() {
+		HoldOutput.clear();
+		auto& c = Hold.GetCollision();
+		for (int j = 0; j < c.size(); ++j) {
+			HoldOutput += GetBorder();
+			for (int i = 0; i < c[j].size(); ++i) {
+				if (!c[j][i]) {
+					HoldOutput += MynoObject::GetBox(Myno::Null);
+					continue;
+				}
+				if (HoldOnce) {
+					HoldOutput += escape::Color(0x404040) + Block;
+				}
+				else {
+					HoldOutput += MynoObject::GetBox(Hold.GetType());
+				}
+			}
+			HoldOutput += escape::LineMoveNext();
+		}
+		for (int i = 0; i < c.size() + 1; ++i) {
+			HoldOutput += GetBorder();
+		}
+		HoldOutput += escape::LineMoveNext();
+	}
 
 public:
 
 	void Init(int w, int h) {
 		Width = w;
 		Height = h + 4;
-		BoardOutPut.reserve(65536);
 		Board.resize(Height);
 		bool xflag = false;
 		bool yflag = false;
@@ -759,7 +871,7 @@ public:
 		InGameTimer.Start();
 	}
 	void End() {
-		system("cls");
+		PutString(escape::LineMoveNext());
 	}
 	bool IsGameEnd() const {
 		return EndFlag;
@@ -789,12 +901,36 @@ public:
 		if (Keyboard[VK_ESCAPE].Down()) {
 			EndFlag = true;
 		}
+
 		if (Keyboard['A'].Down()) {
+			MoveTimer.Start();
+			MoveState = 'A';
 			CurrentMoveLeft();
 		}
 		if (Keyboard['D'].Down()) {
+			MoveState = 'D';
+			MoveTimer.Start();
 			CurrentMoveRight();
 		}
+		if (MoveState == 'A') {
+			if (MoveTimer.GetElapsed().Second() > MoveTime) {
+				CurrentMoveLeft();
+			}
+			if (Keyboard['A'].Up()) {
+				MoveState = '\0';
+				MoveTimer.Reset();
+			}
+		}
+		if (MoveState == 'D') {
+			if (MoveTimer.GetElapsed().Second() > MoveTime) {
+				CurrentMoveRight();
+			}
+			if (Keyboard['D'].Up()) {
+				MoveState = '\0';
+				MoveTimer.Reset();
+			}
+		}
+
 		if (Keyboard[VK_SPACE].Down()) {
 			CurrentHardDrop();
 		}
@@ -811,6 +947,10 @@ public:
 	}
 	void Draw() {
 		DrawBoard();
+		DrawHold();
+		DrawQueue();
+		MargeOutput({HoldOutput, BoardOutput, QueueOutput});
+		PutString(ScreenOutput);
 		DrawScore();
 	}
 };
