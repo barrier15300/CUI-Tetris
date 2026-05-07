@@ -16,6 +16,9 @@ Windowsターミナルホスト
 Windowsコンソールホスト(こっちで起動してください)
 <img width="979" height="512" alt="image" src="https://github.com/user-attachments/assets/f2397abd-23fd-4808-a509-33966f99d2ce" />
 
+長時間プレイする場合はこちらの設定を確認してください
+<img width="995" height="538" alt="image" src="https://github.com/user-attachments/assets/d346401e-d1f3-4a5d-a599-a4f71f4b6171" />
+
 いちいちそんなの気にしないといけないのめんどくさすぎるぜ！という場合は、諦めるかこのリポジトリをクローンしてGUI向けに改造してください
 
 ## 遊び方(操作)
