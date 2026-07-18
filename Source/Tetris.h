@@ -7,6 +7,7 @@
 #include <bitset>
 #include <complex>
 #include <string_view>
+#include <ranges>
 
 #include "Escape.h"
 #include "Input.h"
@@ -37,6 +38,7 @@ enum class Myno : uint8_t {
 	dJ,
 	dL,
 	dT,
+	Mask = ~(PlaceBit | DummyBit)
 };
 
 #define _def_logic_op(t)\
@@ -62,17 +64,19 @@ enum class Direction : uint8_t {
 };
 
 class MynoObject {
-	using inner_field = std::array<std::bitset<4>, 4>;
+
+	using collision_field = std::array<std::bitset<4>, 4>;
 
 	Direction Dir = Direction::Upper;
 	Myno Type = Myno::Null;
-	inner_field Collision{};
+	collision_field Collision{};
 	int x = 0;
 	int y = 0;
+	
 
-	inner_field LRotateImpl() {
+	collision_field LRotateImpl() {
 		auto [w, h] = GetFieldSize();
-		inner_field ret;
+		collision_field ret;
 		for (int j = 0; j < h; ++j) {
 			for (int i = 0; i < w; ++i) {
 				ret[i][j] = Collision[j][w - 1 - i];
@@ -81,9 +85,9 @@ class MynoObject {
 		Dir = RotateDirectionImpl(false);
 		return ret;
 	}
-	inner_field RRotateImpl() {
+	collision_field RRotateImpl() {
 		auto [w, h] = GetFieldSize();
-		inner_field ret;
+		collision_field ret;
 		for (int j = 0; j < h; ++j) {
 			for (int i = 0; i < w; ++i) {
 				ret[i][j] = Collision[h - 1 - j][i];
@@ -226,7 +230,7 @@ public:
 	std::pair<int, int> GetFieldSize() const {
 		return (Type == Myno::I || Type == Myno::O) ? std::pair{4, 4} : std::pair{3, 3};
 	}
-	const inner_field& GetCollision() const {
+	const collision_field& GetCollision() const {
 		return Collision;
 	}
 	Myno GetType() const {

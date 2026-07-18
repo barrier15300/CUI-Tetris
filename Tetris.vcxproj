@@ -144,6 +144,7 @@
     <ClInclude Include="Source\Input.h" />
     <ClInclude Include="Source\Tetris.h" />
     <ClInclude Include="Source\timer.hpp" />
+    <ClInclude Include="Source\Tetris.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

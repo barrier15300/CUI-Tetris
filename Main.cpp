@@ -9,6 +9,8 @@
 
 #include "Source/Tetris.h"
 
+#include "Source/Tetris.hpp"
+
 int main(int argc, char** argv) {
 	HANDLE h = GetStdHandle(STD_OUTPUT_HANDLE);
 	DWORD mode = 0;
